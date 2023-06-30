@@ -1,7 +1,10 @@
-def get_formatted_bytes(bytes: int,
-                        digits: int = 1,
-                        liter_len: str = 1,
-                        ) -> str:
+__version__ = '2.0.0'
+
+
+def format_bytes(bytes: int,
+                 digits: int = 1,
+                 liter_len: str = 1,
+                 ) -> str:
 
     # liter_len must be 1 or 2
     if liter_len not in [1, 2]:

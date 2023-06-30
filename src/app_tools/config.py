@@ -2,74 +2,78 @@
 Config module for get|set|load|export settings
 """
 
-
-class Section():
-    """
-    Section class.
-    Init need dict 'section dict' ({key:value, ...}),
-    create namespace, available in object.<key>
-    object.<key> return value
-    """
-    def __init__(self, section_dict):
-        for key in section_dict:
-            setattr(self, key, section_dict[key])
-
-    def __getattr__(self, attr):
-        """
-        If exist attr, returned attr.
-        Else returned section
-        """
-        try:
-            return getattr(self, attr)
-        except Exception:
-            return None
+__version__ = '2.0.0'
 
 
-# need edit for pep8!!!!!!!!!!!!!!!!!!!!!!!!
+from copy import deepcopy
+
+
 class Config:
-    """
-    Class of global config.
-    """
+    """ Class of global config """
     def __init__(self):
-        """
-        Init. Set defaults.
-        """
-        self.settings = {}
+        """ Init. Set defaults """
+        self.__settings = {}  # settings dict
 
     def __getattr__(self, attr):
-        """
-        If exist attr, returned attr.
-        Else returned section
-        """
-        try:
-            return getattr(self, attr)
-        except Exception:
-            section_dict = self.get_section_dict(attr)
-            section = Section(section_dict)
-            return section
+        """ If exist attr, returned attr. Else returned section """
+        if attr in self.__dict__:
+            return self.__dict__[attr]
+
+        return Section(self.get_section(attr))
+
+    def set(self, section: str, setting: str, value: str):
+        """ Create or rewrited section, setting, value """
+
+        # convert to str type
+        section, setting, value = str(section), str(setting), str(value)
+
+        # if 'section' not exist, create it
+        if section not in self.__settings.keys():
+            self.__settings[section] = {}
+
+        self.__settings[section][setting] = value
+
+    def get(self, section: str, setting: str, default: str = None) -> str:
+        """ get setting. if setting not found - return '' """
+
+        # convert to str type
+        section, setting = str(section), str(setting)
+
+        if section in self.__settings and setting in self.__settings[section]:
+            return self.__settings[section][setting]
+
+        if default or default == '':
+            return str(default)
+
+        raise KeyError(f'not found "{section}" "{setting}" in settings')
+
+    def get_settings(self) -> dict:
+        """ Return deep copy if self.__settings """
+        return deepcopy(self.__settings)
+
+    def get_section(self, section) -> dict:
+        """ return deep copy dict {setting: value, ...} """
+        return deepcopy(self.__settings[section])
+
+    def clear(self):
+        """ clear settings """
+        self.__settings = {}
 
     def __str__(self) -> str:
-        """
-        Return lines of settings in text format.
-        """
+        """ Return str for print """
         out_str = ''
-        for key_section in self.settings:
-            for key_setting in self.settings[key_section]:
-                out_str += '[{}] {} = {}\n'.format(
-                        key_section,
-                        key_setting,
-                        self.settings[key_section][key_setting],
-                        )
+        for section in self.__settings:
+            for setting in self.__settings[section]:
+                value = self.__settings[section][setting]
+                out_str += (f'[{section}] {setting} = {value}\n')
         return out_str
 
-    def read_file(self,
+    def load_file(self,
                   config_file: str,
-                  separator: str = '=',
                   comment: str = '#',
-                  section_start: str = '[',
-                  section_end: str = ']',
+                  default_section: str = 'main',
                   except_if_error: bool = False,
-                  out: object = print,
+                  out=print,
                   ) -> bool:
         ok = True
 
@@ -99,96 +103,86 @@ class Config:
                 # проходим по списку,
                 # если встречаем разделитель, делим элемент на 2,
                 # и загружаем key:value в словарь
-                section = "main"  # Секция по-умолчанию
+                section = default_section
                 for line in lines:
-                    if section_start in line and section_end in line:
+                    if line[0] == '[' and line[-1] == ']':
                         section = line[1:-1].strip()
-                    if separator in line:
+                    if '=' in line:
                         # разделить с макс. кол-вом делений: 1
-                        settings_pair = line.split(separator, maxsplit=1)
+                        settings_pair = line.split('=', maxsplit=1)
                         # Удаляем пробелы в начале и конце
                         settings_pair[0] = settings_pair[0].strip()
                         settings_pair[1] = settings_pair[1].strip()
 
-                        self.set(section=section,
+                        self.set(section=default_section,
                                  setting=settings_pair[0],
                                  value=settings_pair[1],
                                  )
         except FileNotFoundError:
             ok = False
-
-            file_not_found_msg = f'Файл {config_file} не найден!'
-            file_is_dir_msg = f'{config_file} - это каталог!'
+            error_msg = f'Файл {config_file} не найден!'
 
             if except_if_error:
-                raise FileNotFoundError(file_not_found_msg)
+                raise FileNotFoundError(error_msg)
             else:
-                out(file_not_found_msg)
+                out(error_msg)
 
         except IsADirectoryError:
             ok = False
+            error_msg = f'{config_file} - это каталог!'
 
             if except_if_error:
-                raise IsADirectoryError(file_is_dir_msg)
+                raise IsADirectoryError(error_msg)
             else:
-                out(file_is_dir_msg)
+                out(error_msg)
 
         return ok
 
-    def write_file(self,
-                   config_file: str,
-                   separator: str = '=',
-                   comment: str = '#',
-                   section_start: str = '[',
-                   section_end: str = ']'):
+    def export_file(self,
+                    config_file: str,
+                    out=print,
+                    ) -> bool:
+        """ export to file all sections, cettings and values """
 
         ok = True
 
         try:
             with open(config_file, 'w') as file:
-                for section in self.settings:
-                    tab = 25 - len(section)
-                    if tab < 2:
-                        tab = 2
-                    file.write(section_start +
-                               section +
-                               section_end +
-                               ' ' * tab + comment + ' Секция параметров ' +
-                               section + '\n\n')
-                    for setting in self.settings[section]:
-                        if len(self.settings[section][setting]) > 0:
-                            tab = 24 - (len(setting) +
-                                        len(self.settings[section][setting]))
-                            if tab < 2:
-                                tab = 2
-
-                            file.write(setting + ' ' + separator + ' ' +
-                                    self.settings[section][setting] +
-                                    ' ' * tab + comment +
-                                    ' Значение параметра ' +
-                                    setting + '\n')
+                for section in self.__settings:
+                    file.write(f'[{section}]\n')
+                    for setting in self.__settings[section]:
+                        if len(self.__settings[section][setting]) > 0:
+                            value = self.__settings[section][setting]
+                            file.write(f'{setting} = {value}\n')
                     file.write('\n\n')
 
-        except FileNotFoundError:
-            print('ОШИБКА! Файл', config_file, 'не найден!')
+        except Exception:
+            out(f'Ошибка записи в файл {config_file}')
             ok = False
 
         return ok
 
-    def clear(self):
-        self.settings = {}
+    def load_env_vars():
+        pass
 
-    def get(self, section: str, setting: str) -> str:
-        return str(self.settings[section][setting])
 
-    def get_section_dict(self, section) -> dict:
-        return self.settings[section]
+class Section:
+    """
+    Section class.
+    Init need dict 'section dict' ({key:value, ...}),
+    create namespace, available in object.<key>
+    object.<key> return str value
+    """
+    def __init__(self, section: dict):
+        for setting in section:
+            setattr(self, setting, section[setting])
 
-    def set(self, section: str, setting: str, value: str):
+    def __getattr__(self, attr):
         """
-        Create or rewrited section, setting, value
+        If exist attr, returned attr.
+        Else returned section
         """
-        # if 'section' not exist, create it
-        if section not in self.settings.keys():
-            self.settings[section] = {}
-        self.settings[section][setting] = str(value)
+        if attr in self.__dict__:
+            return self.__dict__[attr]
+
+        raise AttributeError(f'no attr "{attr}"')
