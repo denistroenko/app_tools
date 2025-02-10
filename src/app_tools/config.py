@@ -114,7 +114,7 @@ class Config:
                         settings_pair[0] = settings_pair[0].strip()
                         settings_pair[1] = settings_pair[1].strip()
 
-                        self.set(section=default_section,
+                        self.set(section=section,
                                  setting=settings_pair[0],
                                  value=settings_pair[1],
                                  )
